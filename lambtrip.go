@@ -136,14 +136,18 @@ func buildRequest(req *http.Request) (*request, error) {
 
 	// build the body
 	isBase64Encoded := isBinary(req.Header.Get("Content-Type"))
-	body, err := io.ReadAll(req.Body)
-	if err != nil {
-		return nil, err
-	}
-	if isBase64Encoded {
-		buf := make([]byte, base64.StdEncoding.EncodedLen(len(body)))
-		base64.StdEncoding.Encode(buf, body)
-		body = buf
+	body := []byte{}
+	if req.Body != nil {
+		var err error
+		body, err = io.ReadAll(req.Body)
+		if err != nil {
+			return nil, err
+		}
+		if isBase64Encoded {
+			buf := make([]byte, base64.StdEncoding.EncodedLen(len(body)))
+			base64.StdEncoding.Encode(buf, body)
+			body = buf
+		}
 	}
 
 	// build the headers
