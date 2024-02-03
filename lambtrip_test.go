@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"regexp"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
@@ -132,5 +133,24 @@ func TestIsBinary(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("isBinary(%q) = %v, want %v", tt.contentType, got, tt.want)
 		}
+	}
+}
+
+func TestNewRequestID(t *testing.T) {
+	re := regexp.MustCompile(`[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}`)
+	const count = 1000
+	m := make(map[string]bool, count)
+	for i := 0; i < count; i++ {
+		id, err := newRequestID()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !re.MatchString(id) {
+			t.Errorf("invalid request ID: %q", id)
+		}
+		if m[id] {
+			t.Errorf("duplicate request ID: %q", id)
+		}
+		m[id] = true
 	}
 }
