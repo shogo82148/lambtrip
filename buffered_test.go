@@ -19,7 +19,7 @@ func (m InvokeMock) Invoke(ctx context.Context, params *lambda.InvokeInput, optF
 	return m(ctx, params, optFns...)
 }
 
-func TestTransport(t *testing.T) {
+func TestBufferedTransport(t *testing.T) {
 	transport := &BufferedTransport{
 		lambda: InvokeMock(func(ctx context.Context, params *lambda.InvokeInput, optFns ...func(*lambda.Options)) (*lambda.InvokeOutput, error) {
 			var req request
