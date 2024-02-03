@@ -26,14 +26,14 @@ type invokeWithResponseStreamOutput struct {
 	StreamGetter streamGetter
 }
 
-var _ http.RoundTripper = (*ResponseStreaming)(nil)
+var _ http.RoundTripper = (*Transport)(nil)
 
-type ResponseStreaming struct {
+type Transport struct {
 	lambda func(ctx context.Context, params *lambda.InvokeWithResponseStreamInput, optFns ...func(*lambda.Options)) (*invokeWithResponseStreamOutput, error)
 }
 
-func NewResponseStreaming(c *lambda.Client) *ResponseStreaming {
-	return &ResponseStreaming{
+func NewTransport(c *lambda.Client) *Transport {
+	return &Transport{
 		lambda: func(ctx context.Context, params *lambda.InvokeWithResponseStreamInput, optFns ...func(*lambda.Options)) (*invokeWithResponseStreamOutput, error) {
 			out, err := c.InvokeWithResponseStream(ctx, params, optFns...)
 			if err != nil {
@@ -44,7 +44,7 @@ func NewResponseStreaming(c *lambda.Client) *ResponseStreaming {
 	}
 }
 
-func (t *ResponseStreaming) RoundTrip(req *http.Request) (*http.Response, error) {
+func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	ctx := req.Context()
 
 	// build the request

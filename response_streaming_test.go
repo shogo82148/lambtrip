@@ -52,7 +52,7 @@ func (r *invokeWithResponseStreamResponseEventReader) Err() error {
 }
 
 func TestResponseStreaming(t *testing.T) {
-	transport := &ResponseStreaming{
+	transport := &Transport{
 		lambda: func(ctx context.Context, params *lambda.InvokeWithResponseStreamInput, optFns ...func(*lambda.Options)) (*invokeWithResponseStreamOutput, error) {
 			return &invokeWithResponseStreamOutput{
 				Output: &lambda.InvokeWithResponseStreamOutput{

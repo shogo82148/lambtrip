@@ -20,7 +20,7 @@ func (m InvokeMock) Invoke(ctx context.Context, params *lambda.InvokeInput, optF
 }
 
 func TestTransport(t *testing.T) {
-	transport := &Transport{
+	transport := &BufferedTransport{
 		lambda: InvokeMock(func(ctx context.Context, params *lambda.InvokeInput, optFns ...func(*lambda.Options)) (*lambda.InvokeOutput, error) {
 			var req request
 			if err := json.Unmarshal(params.Payload, &req); err != nil {
