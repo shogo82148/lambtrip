@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 
@@ -93,6 +94,8 @@ LOOP:
 			if idx >= 0 {
 				break LOOP
 			}
+		default:
+			return nil, nil, fmt.Errorf("lambtrip: unexpected event type: %T", event)
 		}
 	}
 
@@ -135,8 +138,9 @@ func (b *streamingBody) Read(p []byte) (int, error) {
 		n := copy(p, event.Value.Payload)
 		b.buf = event.Value.Payload[n:]
 		return n, b.stream.Err()
+	default:
+		return 0, fmt.Errorf("lambtrip: unexpected event type: %T", event)
 	}
-	return 0, io.ErrUnexpectedEOF
 }
 
 func (b *streamingBody) Close() error {
