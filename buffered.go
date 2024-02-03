@@ -103,19 +103,19 @@ func (r *response) header() http.Header {
 	return h
 }
 
-var _ http.RoundTripper = (*Transport)(nil)
+var _ http.RoundTripper = (*BufferedTransport)(nil)
 
-type Transport struct {
+type BufferedTransport struct {
 	lambda invokeAPIClient
 }
 
-func New(c *lambda.Client) *Transport {
-	return &Transport{
+func NewBufferedTransport(c *lambda.Client) *BufferedTransport {
+	return &BufferedTransport{
 		lambda: c,
 	}
 }
 
-func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
+func (t *BufferedTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	ctx := req.Context()
 
 	// build the request

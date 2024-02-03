@@ -51,8 +51,8 @@ func (r *invokeWithResponseStreamResponseEventReader) Err() error {
 	return nil
 }
 
-func TestResponseStreaming(t *testing.T) {
-	transport := &ResponseStreaming{
+func TestTransport(t *testing.T) {
+	transport := &Transport{
 		lambda: func(ctx context.Context, params *lambda.InvokeWithResponseStreamInput, optFns ...func(*lambda.Options)) (*invokeWithResponseStreamOutput, error) {
 			return &invokeWithResponseStreamOutput{
 				Output: &lambda.InvokeWithResponseStreamOutput{
@@ -65,6 +65,51 @@ func TestResponseStreaming(t *testing.T) {
 						[]byte(`{}`),
 						{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
 						[]byte(`"Hello, world!"`),
+					})
+					return stream
+				}),
+			}, nil
+		},
+	}
+
+	ctx := context.Background()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://example.com/foo/bar", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := transport.RoundTrip(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if resp.Header.Get("Content-Type") != "application/json" {
+		t.Errorf("resp.Header.Get(%q) = %q, want %q", "Content-Type", resp.Header.Get("Content-Type"), "application/json")
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(body) != `"Hello, world!"` {
+		t.Errorf("body = %q, want %q", body, `"Hello, world!"`)
+	}
+	if err := resp.Body.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestTransport_FallbackToBuffered(t *testing.T) {
+	transport := &Transport{
+		lambda: func(ctx context.Context, params *lambda.InvokeWithResponseStreamInput, optFns ...func(*lambda.Options)) (*invokeWithResponseStreamOutput, error) {
+			return &invokeWithResponseStreamOutput{
+				Output: &lambda.InvokeWithResponseStreamOutput{
+					StatusCode:                http.StatusOK,
+					ResponseStreamContentType: aws.String("application/vnd.amazon.eventstream"),
+				},
+				StreamGetter: GetStreamMock(func() *lambda.InvokeWithResponseStreamEventStream {
+					stream := lambda.NewInvokeWithResponseStreamEventStream()
+					stream.Reader = newInvokeWithResponseStreamResponseEventReader([][]byte{
+						[]byte(`{"body": "\"Hello, world!\""}`),
 					})
 					return stream
 				}),
