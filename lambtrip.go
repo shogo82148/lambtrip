@@ -31,12 +31,6 @@ type invokeAPIClient interface {
 	Invoke(ctx context.Context, params *lambda.InvokeInput, optFns ...func(*lambda.Options)) (*lambda.InvokeOutput, error)
 }
 
-// var _ invokeWithResponseStreamAPIClient = (*lambda.Client)(nil)
-
-// type invokeWithResponseStreamAPIClient interface {
-// 	InvokeWithResponseStream(ctx context.Context, params *lambda.InvokeWithResponseStreamInput, optFns ...func(*lambda.Options)) (*lambda.InvokeWithResponseStreamOutput, error)
-// }
-
 type request struct {
 	Version         string            `json:"version"`
 	RouteKey        string            `json:"routeKey"`
