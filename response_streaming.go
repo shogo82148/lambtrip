@@ -15,21 +15,32 @@ import (
 
 var separate = []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
 
-var _ invokeWithResponseStreamAPIClient = (*lambda.Client)(nil)
+var _ streamGetter = (*lambda.InvokeWithResponseStreamOutput)(nil)
 
-type invokeWithResponseStreamAPIClient interface {
-	InvokeWithResponseStream(ctx context.Context, params *lambda.InvokeWithResponseStreamInput, optFns ...func(*lambda.Options)) (*lambda.InvokeWithResponseStreamOutput, error)
+type streamGetter interface {
+	GetStream() *lambda.InvokeWithResponseStreamEventStream
+}
+
+type invokeWithResponseStreamOutput struct {
+	Output       *lambda.InvokeWithResponseStreamOutput
+	StreamGetter streamGetter
 }
 
 var _ http.RoundTripper = (*ResponseStreaming)(nil)
 
 type ResponseStreaming struct {
-	lambda invokeWithResponseStreamAPIClient
+	lambda func(ctx context.Context, params *lambda.InvokeWithResponseStreamInput, optFns ...func(*lambda.Options)) (*invokeWithResponseStreamOutput, error)
 }
 
 func NewResponseStreaming(c *lambda.Client) *ResponseStreaming {
 	return &ResponseStreaming{
-		lambda: c,
+		lambda: func(ctx context.Context, params *lambda.InvokeWithResponseStreamInput, optFns ...func(*lambda.Options)) (*invokeWithResponseStreamOutput, error) {
+			out, err := c.InvokeWithResponseStream(ctx, params, optFns...)
+			if err != nil {
+				return nil, err
+			}
+			return &invokeWithResponseStreamOutput{Output: out, StreamGetter: out}, nil
+		},
 	}
 }
 
@@ -47,7 +58,7 @@ func (t *ResponseStreaming) RoundTrip(req *http.Request) (*http.Response, error)
 	}
 
 	// invoke the lambda
-	out, err := t.lambda.InvokeWithResponseStream(ctx, &lambda.InvokeWithResponseStreamInput{
+	out, err := t.lambda(ctx, &lambda.InvokeWithResponseStreamInput{
 		FunctionName: aws.String(req.URL.Host),
 		Payload:      payload,
 	})
@@ -55,7 +66,7 @@ func (t *ResponseStreaming) RoundTrip(req *http.Request) (*http.Response, error)
 		return nil, err
 	}
 
-	stream := out.GetStream()
+	stream := out.StreamGetter.GetStream()
 	resp, buf, err := handleStreamingPrelude(ctx, stream)
 	if err != nil {
 		return nil, err
