@@ -82,6 +82,10 @@ func TestResponseStreaming(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	if resp.Header.Get("Content-Type") != "application/json" {
+		t.Errorf("resp.Header.Get(%q) = %q, want %q", "Content-Type", resp.Header.Get("Content-Type"), "application/json")
+	}
+
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatal(err)

@@ -87,6 +87,22 @@ func (r *response) statusCode() int {
 	return r.StatusCode
 }
 
+func (r *response) header() http.Header {
+	h := make(http.Header, len(r.Headers)+len(r.Cookies))
+	for k, v := range r.Headers {
+		h.Set(k, v)
+	}
+
+	for _, c := range r.Cookies {
+		h.Add("Set-Cookie", c)
+	}
+
+	if ct := h.Get("Content-Type"); ct == "" {
+		h.Set("Content-Type", "application/json")
+	}
+	return h
+}
+
 var _ http.RoundTripper = (*Transport)(nil)
 
 type Transport struct {
@@ -140,7 +156,9 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 		Proto:      "HTTP/1.0",
 		ProtoMajor: 1,
 		ProtoMinor: 0,
+		Header:     resp.header(),
 		Body:       io.NopCloser(strings.NewReader(resp.Body)),
+		Close:      true,
 		Request:    req,
 	}, nil
 }
