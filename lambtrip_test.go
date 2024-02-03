@@ -2,38 +2,43 @@ package lambtrip
 
 import (
 	"context"
-	"io"
 	"net/http"
 	"testing"
 
-	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
 )
 
-func TestLambtrip(t *testing.T) {
-	t.Skip("skipping test") // this test is skipped because it requires a real AWS account
+var _ invokeAPIClient = InvokeMock(nil)
+
+type InvokeMock func(ctx context.Context, params *lambda.InvokeInput, optFns ...func(*lambda.Options)) (*lambda.InvokeOutput, error)
+
+func (m InvokeMock) Invoke(ctx context.Context, params *lambda.InvokeInput, optFns ...func(*lambda.Options)) (*lambda.InvokeOutput, error) {
+	return m(ctx, params, optFns...)
+}
+
+func TestTransport(t *testing.T) {
+	transport := &Transport{
+		lambda: InvokeMock(func(ctx context.Context, params *lambda.InvokeInput, optFns ...func(*lambda.Options)) (*lambda.InvokeOutput, error) {
+			return &lambda.InvokeOutput{
+				StatusCode: http.StatusOK,
+				Payload:    []byte(`{}`),
+			}, nil
+		}),
+	}
 
 	ctx := context.Background()
-	cfg, err := config.LoadDefaultConfig(ctx)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "lambda://function-name/foo/bar", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc := lambda.NewFromConfig(cfg)
+	resp, err := transport.RoundTrip(req)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	roundtripper := New(svc)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "lambda://url-compressor-CompressUrlFunction-RSmoCBggFdvq/", nil)
-	if err != nil {
-		t.Fatal(err)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("resp.StatusCode = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
-	resp, err := roundtripper.RoundTrip(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Log(string(body))
 }
 
 func TestIsBinary(t *testing.T) {

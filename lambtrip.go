@@ -68,6 +68,13 @@ type response struct {
 	Cookies         []string          `json:"cookies"`
 }
 
+func (r *response) statusCode() int {
+	if r.StatusCode == 0 {
+		return http.StatusOK
+	}
+	return r.StatusCode
+}
+
 var _ http.RoundTripper = (*Transport)(nil)
 
 type Transport struct {
@@ -116,7 +123,7 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 
 	return &http.Response{
-		StatusCode: resp.StatusCode,
+		StatusCode: resp.statusCode(),
 		Proto:      "HTTP/1.0",
 		ProtoMajor: 1,
 		ProtoMinor: 0,
