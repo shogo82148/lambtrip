@@ -2,11 +2,14 @@ package lambtrip
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -68,6 +71,15 @@ type response struct {
 	Cookies         []string          `json:"cookies"`
 }
 
+func (r *response) status() string {
+	statusCode := r.statusCode()
+	text := http.StatusText(statusCode)
+	if text == "" {
+		return strconv.Itoa(statusCode)
+	}
+	return strconv.Itoa(statusCode) + " " + text
+}
+
 func (r *response) statusCode() int {
 	if r.StatusCode == 0 {
 		return http.StatusOK
@@ -123,6 +135,7 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 
 	return &http.Response{
+		Status:     resp.status(),
 		StatusCode: resp.statusCode(),
 		Proto:      "HTTP/1.0",
 		ProtoMajor: 1,
@@ -133,10 +146,10 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 func buildRequest(req *http.Request) (*request, error) {
-	now := time.Now()
+	now := time.Now().UTC()
 
 	// build the body
-	isBase64Encoded := isBinary(req.Header.Get("Content-Type"))
+	isBase64Encoded := req.Body != nil && isBinary(req.Header.Get("Content-Type"))
 	body := []byte{}
 	if req.Body != nil {
 		var err error
@@ -166,20 +179,26 @@ func buildRequest(req *http.Request) (*request, error) {
 		cookies = append(cookies, c.String())
 	}
 
+	id, err := newRequestID()
+	if err != nil {
+		return nil, err
+	}
+
 	return &request{
 		Version:         "2.0",
 		RouteKey:        "$default",
 		HTTPMethod:      req.Method,
 		Body:            string(body),
 		IsBase64Encoded: isBase64Encoded,
-		RawPath:         req.URL.RawPath,
+		RawPath:         req.URL.EscapedPath(),
 		RawQueryString:  req.URL.RawQuery,
 		Headers:         headers,
 		Cookies:         cookies,
 		RequestContext: &requestContext{
+			RequestID: id,
 			HTTP: &requestContextHTTP{
 				Method:    req.Method,
-				Path:      req.URL.EscapedPath(),
+				Path:      req.URL.Path,
 				Protocol:  "HTTP/1.0",
 				UserAgent: req.UserAgent(),
 			},
@@ -227,4 +246,25 @@ func isBinary(contentType string) bool {
 		return false
 	}
 	return true
+}
+
+func newRequestID() (string, error) {
+	var buf [16]byte
+	if _, err := rand.Read(buf[:]); err != nil {
+		return "", err
+	}
+	buf[6] = (buf[6] & 0x0f) | 0x40 // set version to 4
+	buf[8] = (buf[8] & 0x3f) | 0x80 // set variant to 10
+
+	var dst [36]byte
+	hex.Encode(dst[:], buf[:4])
+	dst[8] = '-'
+	hex.Encode(dst[9:], buf[4:6])
+	dst[13] = '-'
+	hex.Encode(dst[14:], buf[6:8])
+	dst[18] = '-'
+	hex.Encode(dst[19:], buf[8:10])
+	dst[23] = '-'
+	hex.Encode(dst[24:], buf[10:])
+	return string(dst[:]), nil
 }
