@@ -73,12 +73,16 @@ func (t *ResponseStreaming) RoundTrip(req *http.Request) (*http.Response, error)
 	}
 
 	return &http.Response{
-		StatusCode: resp.StatusCode,
-		Proto:      "HTTP/1.0",
-		ProtoMajor: 1,
-		ProtoMinor: 0,
-		Body:       &streamingBody{ctx, buf, stream},
-		Request:    req,
+		Status:        resp.status(),
+		StatusCode:    resp.statusCode(),
+		Proto:         "HTTP/1.0",
+		ProtoMajor:    1,
+		ProtoMinor:    0,
+		Header:        resp.header(),
+		ContentLength: -1,
+		Body:          &streamingBody{ctx, buf, stream},
+		Close:         true,
+		Request:       req,
 	}, nil
 }
 

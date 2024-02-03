@@ -65,7 +65,7 @@ func TestTransport(t *testing.T) {
 
 			return &lambda.InvokeOutput{
 				StatusCode: http.StatusOK,
-				Payload:    []byte(`{"body": "Hello, world!"}`),
+				Payload:    []byte(`{"body": "\"Hello, world!\""}`),
 			}, nil
 		}),
 	}
@@ -98,13 +98,16 @@ func TestTransport(t *testing.T) {
 	if resp.Request != req {
 		t.Errorf("resp.Request = %v, want %v", resp.Request, req)
 	}
+	if resp.Header.Get("Content-Type") != "application/json" {
+		t.Errorf("resp.Header.Get(%q) = %q, want %q", "Content-Type", resp.Header.Get("Content-Type"), "application/json")
+	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(body) != "Hello, world!" {
-		t.Errorf("body = %q, want %q", string(body), "Hello, world!")
+	if string(body) != `"Hello, world!"` {
+		t.Errorf("body = %q, want %q", string(body), `"Hello, world!"`)
 	}
 	if err := resp.Body.Close(); err != nil {
 		t.Fatal(err)
