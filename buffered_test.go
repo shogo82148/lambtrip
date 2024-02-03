@@ -114,6 +114,45 @@ func TestBufferedTransport(t *testing.T) {
 	}
 }
 
+func TestBufferedTransport_Base64Response(t *testing.T) {
+	transport := &BufferedTransport{
+		lambda: InvokeMock(func(ctx context.Context, params *lambda.InvokeInput, optFns ...func(*lambda.Options)) (*lambda.InvokeOutput, error) {
+			return &lambda.InvokeOutput{
+				StatusCode: http.StatusOK,
+				Payload:    []byte(`{"body": "IkhlbGxvLCB3b3JsZCEi", "isBase64Encoded": true}`),
+			}, nil
+		}),
+	}
+
+	ctx := context.Background()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "lambda://function-name/foo/bar", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := transport.RoundTrip(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("resp.StatusCode = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	if resp.Header.Get("Content-Type") != "application/json" {
+		t.Errorf("resp.Header.Get(%q) = %q, want %q", "Content-Type", resp.Header.Get("Content-Type"), "application/json")
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(body) != `"Hello, world!"` {
+		t.Errorf("body = %q, want %q", string(body), `"Hello, world!"`)
+	}
+	if err := resp.Body.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestIsBinary(t *testing.T) {
 	tests := []struct {
 		contentType string

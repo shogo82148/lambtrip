@@ -8,7 +8,6 @@ import (
 	"io"
 	"mime"
 	"net/http"
-	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
@@ -202,16 +201,5 @@ LOOP:
 	if err := json.Unmarshal(buf, &resp); err != nil {
 		return nil, err
 	}
-
-	return &http.Response{
-		Status:     resp.status(),
-		StatusCode: resp.statusCode(),
-		Proto:      "HTTP/1.0",
-		ProtoMajor: 1,
-		ProtoMinor: 0,
-		Header:     resp.header(),
-		Body:       io.NopCloser(strings.NewReader(resp.Body)),
-		Close:      true,
-		Request:    req,
-	}, nil
+	return buildResponse(&resp, req)
 }

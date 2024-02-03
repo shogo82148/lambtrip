@@ -103,6 +103,21 @@ func (r *response) header() http.Header {
 	return h
 }
 
+func (r *response) contentLength() int64 {
+	if r.IsBase64Encoded {
+		return int64(base64.StdEncoding.DecodedLen(len(r.Body)))
+	}
+	return int64(len(r.Body))
+}
+
+func (r *response) body() io.ReadCloser {
+	var reader io.Reader = strings.NewReader(r.Body)
+	if r.IsBase64Encoded {
+		reader = base64.NewDecoder(base64.StdEncoding, reader)
+	}
+	return io.NopCloser(reader)
+}
+
 var _ http.RoundTripper = (*BufferedTransport)(nil)
 
 type BufferedTransport struct {
@@ -149,18 +164,7 @@ func (t *BufferedTransport) RoundTrip(req *http.Request) (*http.Response, error)
 	if err := json.Unmarshal(out.Payload, &resp); err != nil {
 		return nil, err
 	}
-
-	return &http.Response{
-		Status:     resp.status(),
-		StatusCode: resp.statusCode(),
-		Proto:      "HTTP/1.0",
-		ProtoMajor: 1,
-		ProtoMinor: 0,
-		Header:     resp.header(),
-		Body:       io.NopCloser(strings.NewReader(resp.Body)),
-		Close:      true,
-		Request:    req,
-	}, nil
+	return buildResponse(&resp, req)
 }
 
 func buildRequest(req *http.Request) (*request, error) {
@@ -264,6 +268,23 @@ func isBinary(contentType string) bool {
 		return false
 	}
 	return true
+}
+
+func buildResponse(resp *response, req *http.Request) (*http.Response, error) {
+	h := resp.header()
+	h.Set("Content-Length", strconv.FormatInt(resp.contentLength(), 10))
+	return &http.Response{
+		Status:        resp.status(),
+		StatusCode:    resp.statusCode(),
+		Proto:         "HTTP/1.0",
+		ProtoMajor:    1,
+		ProtoMinor:    0,
+		Request:       req,
+		Header:        h,
+		ContentLength: resp.contentLength(),
+		Body:          resp.body(),
+		Close:         true,
+	}, nil
 }
 
 func newRequestID() (string, error) {
