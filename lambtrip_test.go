@@ -11,6 +11,8 @@ import (
 )
 
 func TestLambtrip(t *testing.T) {
+	t.Skip("skipping test") // this test is skipped because it requires a real AWS account
+
 	ctx := context.Background()
 	cfg, err := config.LoadDefaultConfig(ctx)
 	if err != nil {
