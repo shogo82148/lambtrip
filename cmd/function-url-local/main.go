@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
@@ -61,8 +63,42 @@ func main() {
 
 	// start the server
 	addr := net.JoinHostPort(host, port)
-	if err := http.ListenAndServe(addr, handler); err != nil {
+	if err := startServer(ctx, addr, handler); err != nil {
 		slog.ErrorContext(ctx, "failed to start server", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
+}
+
+func startServer(ctx context.Context, addr string, handler http.Handler) error {
+	// start the server
+	ch := make(chan error, 1)
+	s := &http.Server{
+		Addr:    addr,
+		Handler: handler,
+	}
+	go func() {
+		slog.InfoContext(ctx, "starting the server", slog.String("addr", addr))
+		ch <- s.ListenAndServe()
+		close(ch)
+	}()
+
+	// wait for a signal
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(sig)
+
+	select {
+	case err := <-ch:
+		return err
+	case <-sig:
+	}
+
+	// graceful shutdown
+	signal.Stop(sig)
+	slog.InfoContext(ctx, "shutting down the server")
+	if err := s.Shutdown(ctx); err != nil {
+		return err
+	}
+
+	return nil
 }
