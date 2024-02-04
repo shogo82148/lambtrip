@@ -249,6 +249,9 @@ func isBinary(contentType string) bool {
 	if strings.EqualFold(mediaType, "application/json") {
 		return false
 	}
+	if strings.EqualFold(mediaType, "application/yaml") {
+		return false
+	}
 	if strings.EqualFold(mediaType, "application/javascript") {
 		return false
 	}
@@ -262,6 +265,9 @@ func isBinary(contentType string) bool {
 	}
 	suffix := mediaType[i:]
 	if strings.EqualFold(suffix, "+json") {
+		return false
+	}
+	if strings.EqualFold(suffix, "+yaml") {
 		return false
 	}
 	if strings.EqualFold(suffix, "+xml") {
