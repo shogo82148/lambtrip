@@ -31,17 +31,23 @@ func init() {
 func main() {
 	ctx := context.Background()
 
+	// parse flags
 	flag.Parse()
 	if flag.NArg() < 1 {
 		slog.ErrorContext(ctx, "function name is required")
+		os.Exit(1)
 	}
 	functionName := flag.Arg(0)
 
+	// initialize AWS SDK
 	cfg, err := config.LoadDefaultConfig(ctx)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to load configuration", slog.String("error", err.Error()))
+		os.Exit(1)
 	}
 	svc := lambda.NewFromConfig(cfg)
+
+	// create a reverse proxy
 	t := lambtrip.NewTransport(svc)
 	proxy := &httputil.ReverseProxy{
 		Director: func(req *http.Request) {
@@ -53,8 +59,10 @@ func main() {
 	myLogger := httplogger.NewSlogLogger(slog.LevelInfo, "request", logger)
 	handler := httplogger.LoggingHandler(myLogger, proxy)
 
+	// start the server
 	addr := net.JoinHostPort(host, port)
 	if err := http.ListenAndServe(addr, handler); err != nil {
 		slog.ErrorContext(ctx, "failed to start server", slog.String("error", err.Error()))
+		os.Exit(1)
 	}
 }
