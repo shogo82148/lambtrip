@@ -1,6 +1,7 @@
 package lambtrip
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
@@ -103,19 +104,18 @@ func (r *response) header() http.Header {
 	return h
 }
 
-func (r *response) contentLength() int64 {
+func (r *response) body() (body io.ReadCloser, contentLength int64, err error) {
 	if r.IsBase64Encoded {
-		return int64(base64.StdEncoding.DecodedLen(len(r.Body)))
+		decoded, err := base64.StdEncoding.DecodeString(r.Body)
+		if err != nil {
+			return nil, 0, err
+		}
+		reader := bytes.NewReader(decoded)
+		return io.NopCloser(reader), int64(len(decoded)), nil
 	}
-	return int64(len(r.Body))
-}
 
-func (r *response) body() io.ReadCloser {
-	var reader io.Reader = strings.NewReader(r.Body)
-	if r.IsBase64Encoded {
-		reader = base64.NewDecoder(base64.StdEncoding, reader)
-	}
-	return io.NopCloser(reader)
+	reader := strings.NewReader(r.Body)
+	return io.NopCloser(reader), int64(len(r.Body)), nil
 }
 
 var _ http.RoundTripper = (*BufferedTransport)(nil)
@@ -278,7 +278,11 @@ func isBinary(contentType string) bool {
 
 func buildResponse(resp *response, req *http.Request) (*http.Response, error) {
 	h := resp.header()
-	h.Set("Content-Length", strconv.FormatInt(resp.contentLength(), 10))
+	body, length, err := resp.body()
+	if err != nil {
+		return nil, fmt.Errorf("lambtrip: failed to build response body: %w", err)
+	}
+	h.Set("Content-Length", strconv.FormatInt(length, 10))
 	return &http.Response{
 		Status:        resp.status(),
 		StatusCode:    resp.statusCode(),
@@ -287,8 +291,8 @@ func buildResponse(resp *response, req *http.Request) (*http.Response, error) {
 		ProtoMinor:    0,
 		Request:       req,
 		Header:        h,
-		ContentLength: resp.contentLength(),
-		Body:          resp.body(),
+		ContentLength: length,
+		Body:          body,
 		Close:         true,
 	}, nil
 }
