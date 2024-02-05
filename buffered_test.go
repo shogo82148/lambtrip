@@ -101,6 +101,9 @@ func TestBufferedTransport(t *testing.T) {
 	if resp.Header.Get("Content-Type") != "application/json" {
 		t.Errorf("resp.Header.Get(%q) = %q, want %q", "Content-Type", resp.Header.Get("Content-Type"), "application/json")
 	}
+	if resp.Header.Get("Content-Length") != "15" {
+		t.Errorf("resp.Header.Get(%q) = %q, want %q", "Content-Length", resp.Header.Get("Content-Length"), "15")
+	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -139,6 +142,9 @@ func TestBufferedTransport_Base64Response(t *testing.T) {
 	}
 	if resp.Header.Get("Content-Type") != "application/json" {
 		t.Errorf("resp.Header.Get(%q) = %q, want %q", "Content-Type", resp.Header.Get("Content-Type"), "application/json")
+	}
+	if resp.Header.Get("Content-Length") != "15" {
+		t.Errorf("resp.Header.Get(%q) = %q, want %q", "Content-Length", resp.Header.Get("Content-Length"), "15")
 	}
 
 	body, err := io.ReadAll(resp.Body)
