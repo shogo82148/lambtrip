@@ -18,12 +18,14 @@ import (
 )
 
 var host, port string
+var invokeMode string
 var logHandler slog.Handler
 var logger *slog.Logger
 
 func init() {
 	flag.StringVar(&host, "host", "", "host to forward requests to")
 	flag.StringVar(&port, "port", "8080", "port to listen on")
+	flag.StringVar(&invokeMode, "invoke-mode", "BUFFERED", "invoke mode (BUFFERED or RESPONSE_STREAM)")
 
 	logHandler = slog.NewJSONHandler(os.Stderr, nil)
 	logger = slog.New(logHandler)
@@ -50,7 +52,15 @@ func main() {
 	svc := lambda.NewFromConfig(cfg)
 
 	// create a reverse proxy
-	t := lambtrip.NewTransport(svc)
+	var t http.RoundTripper
+	switch invokeMode {
+	case "BUFFERED":
+		t = lambtrip.NewBufferedTransport(svc)
+	case "RESPONSE_STREAM":
+		t = lambtrip.NewResponseStreamTransport(svc)
+	default:
+		slog.ErrorContext(ctx, "unknown invoke mode", slog.String("mode", invokeMode))
+	}
 	proxy := &httputil.ReverseProxy{
 		Director: func(req *http.Request) {
 			req.URL.Host = functionName
