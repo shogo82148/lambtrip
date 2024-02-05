@@ -2,6 +2,7 @@ package lambtrip
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"testing"
@@ -95,5 +96,81 @@ func TestTransport(t *testing.T) {
 	}
 	if err := resp.Body.Close(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestTransport_ErrUnexpectedEOFInPrelude(t *testing.T) {
+	transport := &ResponseStreamTransport{
+		lambda: func(ctx context.Context, params *lambda.InvokeWithResponseStreamInput, optFns ...func(*lambda.Options)) (*invokeWithResponseStreamOutput, error) {
+			return &invokeWithResponseStreamOutput{
+				Output: &lambda.InvokeWithResponseStreamOutput{
+					StatusCode:                http.StatusOK,
+					ResponseStreamContentType: aws.String("application/vnd.awslambda.http-integration-response"),
+				},
+				StreamGetter: GetStreamMock(func() *lambda.InvokeWithResponseStreamEventStream {
+					ch := make(chan types.InvokeWithResponseStreamResponseEvent)
+					close(ch)
+
+					stream := lambda.NewInvokeWithResponseStreamEventStream()
+					stream.Reader = &invokeWithResponseStreamResponseEventReader{ch: ch}
+					return stream
+				}),
+			}, nil
+		},
+	}
+
+	ctx := context.Background()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://example.com/foo/bar", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = transport.RoundTrip(req)
+	if !errors.Is(err, io.ErrUnexpectedEOF) {
+		t.Errorf("err = %v, want %v", err, io.ErrUnexpectedEOF)
+	}
+}
+
+func TestTransport_ErrUnexpectedEOF(t *testing.T) {
+	transport := &ResponseStreamTransport{
+		lambda: func(ctx context.Context, params *lambda.InvokeWithResponseStreamInput, optFns ...func(*lambda.Options)) (*invokeWithResponseStreamOutput, error) {
+			return &invokeWithResponseStreamOutput{
+				Output: &lambda.InvokeWithResponseStreamOutput{
+					StatusCode:                http.StatusOK,
+					ResponseStreamContentType: aws.String("application/vnd.awslambda.http-integration-response"),
+				},
+				StreamGetter: GetStreamMock(func() *lambda.InvokeWithResponseStreamEventStream {
+					ch := make(chan types.InvokeWithResponseStreamResponseEvent, 2)
+					ch <- &types.InvokeWithResponseStreamResponseEventMemberPayloadChunk{
+						Value: types.InvokeResponseStreamUpdate{
+							Payload: []byte(`{}`),
+						},
+					}
+					ch <- &types.InvokeWithResponseStreamResponseEventMemberPayloadChunk{
+						Value: types.InvokeResponseStreamUpdate{
+							Payload: []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+						},
+					}
+					close(ch)
+
+					stream := lambda.NewInvokeWithResponseStreamEventStream()
+					stream.Reader = &invokeWithResponseStreamResponseEventReader{ch: ch}
+					return stream
+				}),
+			}, nil
+		},
+	}
+
+	ctx := context.Background()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://example.com/foo/bar", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := transport.RoundTrip(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = io.ReadAll(resp.Body)
+	if !errors.Is(err, io.ErrUnexpectedEOF) {
+		t.Errorf("err = %v, want %v", err, io.ErrUnexpectedEOF)
 	}
 }
