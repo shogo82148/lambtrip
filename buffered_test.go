@@ -191,31 +191,136 @@ func TestBufferedTransport_Forbidden(t *testing.T) {
 
 func TestIsBinary(t *testing.T) {
 	tests := []struct {
-		contentType string
-		want        bool
+		header http.Header
+		want   bool
 	}{
-		{"text/html", false},
-		{"text/plain", false},
-		{"text/xml", false},
-		{"application/json", false},
-		{"application/javascript", false},
-		{"application/yaml", false},
-		{"application/xml", false},
-		{"application/foo+json", false},
-		{"application/foo+yaml", false},
-		{"application/foo+xml", false},
-		{"application/foo+xml ; charset=utf8", false},
-		{"application/octet-stream", true},
-		{"image/jpeg", true},
-		{"audio/mpeg", true},
-		{"unknown-content-type", true},
-		{"", true},
+		// text/html but encoded as gzip
+		{
+			header: http.Header{
+				"Content-Type":     []string{"text/html; charset=utf-8"},
+				"Content-Encoding": []string{"gzip"},
+			},
+			want: true,
+		},
+
+		// text/html and not encoded
+		{
+			header: http.Header{
+				"Content-Type":     []string{"text/html; charset=utf-8"},
+				"Content-Encoding": []string{"identity"},
+			},
+			want: false,
+		},
+
+		// text/*
+		{
+			header: http.Header{
+				"Content-Type": []string{"text/html"},
+			},
+			want: false,
+		},
+		{
+			header: http.Header{
+				"Content-Type": []string{"text/plain"},
+			},
+			want: false,
+		},
+		{
+			header: http.Header{
+				"Content-Type": []string{"text/xml"},
+			},
+			want: false,
+		},
+
+		// data formats that are encoded as text
+		{
+			header: http.Header{
+				"Content-Type": []string{"application/json"},
+			},
+			want: false,
+		},
+		{
+			header: http.Header{
+				"Content-Type": []string{"application/javascript"},
+			},
+			want: false,
+		},
+		{
+			header: http.Header{
+				"Content-Type": []string{"application/yaml"},
+			},
+			want: false,
+		},
+		{
+			header: http.Header{
+				"Content-Type": []string{"application/xml"},
+			},
+			want: false,
+		},
+
+		// custom media types that are encoded as text
+		{
+			header: http.Header{
+				"Content-Type": []string{"application/foo+json"},
+			},
+			want: false,
+		},
+		{
+			header: http.Header{
+				"Content-Type": []string{"application/foo+yaml"},
+			},
+			want: false,
+		},
+		{
+			header: http.Header{
+				"Content-Type": []string{"application/foo+xml"},
+			},
+			want: false,
+		},
+		{
+			header: http.Header{
+				"Content-Type": []string{"application/foo+xml ; charset=utf8"},
+			},
+			want: false,
+		},
+
+		// common binary formats
+		{
+			header: http.Header{
+				"Content-Type": []string{"application/octet-stream"},
+			},
+			want: true,
+		},
+		{
+			header: http.Header{
+				"Content-Type": []string{"image/jpeg"},
+			},
+			want: true,
+		},
+		{
+			header: http.Header{
+				"Content-Type": []string{"audio/mpeg"},
+			},
+			want: true,
+		},
+		{
+			header: http.Header{
+				"Content-Type": []string{"unknown-content-type"},
+			},
+			want: true,
+		},
+		{
+			header: http.Header{
+				"Content-Type": []string{""},
+			},
+			want: true,
+		},
 	}
 
 	for _, tt := range tests {
-		got := isBinary(tt.contentType)
+		got := isBinary(tt.header)
 		if got != tt.want {
-			t.Errorf("isBinary(%q) = %v, want %v", tt.contentType, got, tt.want)
+			t.Errorf("isBinary(%v) = %v, want %v", tt.header, got, tt.want)
 		}
 	}
 }
