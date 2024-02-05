@@ -18,13 +18,14 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
 )
 
-type Error struct {
+// LambdaError is an error returned by the lambda client.
+type LambdaError struct {
 	StatusCode int
 	Payload    []byte
 }
 
-func (e *Error) Error() string {
-	return fmt.Sprintf("unexpected status code %d", e.StatusCode)
+func (e *LambdaError) Error() string {
+	return fmt.Sprintf("lambtrip: unexpected status code %d", e.StatusCode)
 }
 
 const timeFormat = "02/Jan/2006:15:04:05 -0700"
@@ -153,7 +154,7 @@ func (t *BufferedTransport) RoundTrip(req *http.Request) (*http.Response, error)
 	}
 
 	if out.StatusCode != http.StatusOK {
-		return nil, &Error{
+		return nil, &LambdaError{
 			StatusCode: int(out.StatusCode),
 			Payload:    out.Payload,
 		}

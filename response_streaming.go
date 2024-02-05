@@ -14,6 +14,16 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/lambda/types"
 )
 
+// ResponseStreamError is an error during response stream.
+type ResponseStreamError struct {
+	ErrorCode    string
+	ErrorDetails string
+}
+
+func (e *ResponseStreamError) Error() string {
+	return fmt.Sprintf("lambtrip: error during response stream: %s, %s", e.ErrorCode, e.ErrorDetails)
+}
+
 var separate = []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
 
 var _ streamGetter = (*lambda.InvokeWithResponseStreamOutput)(nil)
@@ -72,7 +82,7 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 		return handleStreamingFallbackBuffered(ctx, stream, req)
 	}
 
-	if mediatype != "application/vnd.awslambda.http-integration-response" {
+	if mediatype != "application/vnd.awslambda.http-integration-response" && mediatype != "application/vnd.amazon.eventstream" {
 		return handleStreamingFallbackBuffered(ctx, stream, req)
 	}
 
@@ -158,11 +168,19 @@ func (b *streamingBody) Read(p []byte) (int, error) {
 
 	switch event := event.(type) {
 	case *types.InvokeWithResponseStreamResponseEventMemberInvokeComplete:
+		if event.Value.ErrorCode != nil || event.Value.ErrorDetails != nil {
+			return 0, &ResponseStreamError{
+				ErrorCode:    aws.ToString(event.Value.ErrorCode),
+				ErrorDetails: aws.ToString(event.Value.ErrorDetails),
+			}
+		}
 		return 0, io.EOF
 	case *types.InvokeWithResponseStreamResponseEventMemberPayloadChunk:
 		n := copy(p, event.Value.Payload)
 		b.buf = event.Value.Payload[n:]
 		return n, b.stream.Err()
+	case nil:
+		return 0, io.ErrUnexpectedEOF
 	default:
 		return 0, fmt.Errorf("lambtrip: unexpected event type: %T", event)
 	}
@@ -188,9 +206,17 @@ LOOP:
 
 		switch event := event.(type) {
 		case *types.InvokeWithResponseStreamResponseEventMemberInvokeComplete:
+			if event.Value.ErrorCode != nil || event.Value.ErrorDetails != nil {
+				return nil, &ResponseStreamError{
+					ErrorCode:    aws.ToString(event.Value.ErrorCode),
+					ErrorDetails: aws.ToString(event.Value.ErrorDetails),
+				}
+			}
 			break LOOP
 		case *types.InvokeWithResponseStreamResponseEventMemberPayloadChunk:
 			buf = append(buf, event.Value.Payload...)
+		case nil:
+			return nil, io.ErrUnexpectedEOF
 		default:
 			return nil, fmt.Errorf("lambtrip: unexpected event type: %T", event)
 		}
