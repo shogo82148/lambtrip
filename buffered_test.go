@@ -3,6 +3,7 @@ package lambtrip
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"regexp"
@@ -156,6 +157,35 @@ func TestBufferedTransport_Base64Response(t *testing.T) {
 	}
 	if err := resp.Body.Close(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestBufferedTransport_Forbidden(t *testing.T) {
+	transport := &BufferedTransport{
+		lambda: InvokeMock(func(ctx context.Context, params *lambda.InvokeInput, optFns ...func(*lambda.Options)) (*lambda.InvokeOutput, error) {
+			return &lambda.InvokeOutput{
+				StatusCode: http.StatusForbidden,
+				Payload:    []byte(`{"body": "\"Hello, world!\""}`),
+			}, nil
+		}),
+	}
+
+	ctx := context.Background()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "lambda://function-name/foo/bar", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = transport.RoundTrip(req)
+
+	var myErr *LambdaError
+	if !errors.As(err, &myErr) {
+		t.Fatalf("unexpected error type: %T", err)
+	}
+	if myErr.StatusCode != http.StatusForbidden {
+		t.Errorf("myErr.StatusCode = %d, want %d", myErr.StatusCode, http.StatusForbidden)
+	}
+	if string(myErr.Payload) != `{"body": "\"Hello, world!\""}` {
+		t.Errorf("myErr.Payload = %q, want %q", string(myErr.Payload), `{"body": "\"Hello, world!\""}`)
 	}
 }
 
