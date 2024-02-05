@@ -102,17 +102,28 @@ func handleStreamingPrelude(ctx context.Context, stream *lambda.InvokeWithRespon
 	idx := -1
 LOOP:
 	for {
+		var ok bool
 		var event types.InvokeWithResponseStreamResponseEvent
 		select {
 		case <-ctx.Done():
 			stream.Close()
 			return nil, nil, ctx.Err()
-		case event = <-stream.Events():
+		case event, ok = <-stream.Events():
+			if !ok {
+				stream.Close()
+				return nil, nil, io.ErrUnexpectedEOF
+			}
 		}
 
 		switch event := event.(type) {
 		case *types.InvokeWithResponseStreamResponseEventMemberInvokeComplete:
 			stream.Close()
+			if event.Value.ErrorCode != nil || event.Value.ErrorDetails != nil {
+				return nil, nil, &ResponseStreamError{
+					ErrorCode:    aws.ToString(event.Value.ErrorCode),
+					ErrorDetails: aws.ToString(event.Value.ErrorDetails),
+				}
+			}
 			return nil, nil, io.ErrUnexpectedEOF
 		case *types.InvokeWithResponseStreamResponseEventMemberPayloadChunk:
 			buf = append(buf, event.Value.Payload...)
@@ -150,11 +161,15 @@ func (b *streamingBody) Read(p []byte) (int, error) {
 		return n, nil
 	}
 
+	var ok bool
 	var event types.InvokeWithResponseStreamResponseEvent
 	select {
 	case <-b.ctx.Done():
 		return 0, b.ctx.Err()
-	case event = <-b.stream.Events():
+	case event, ok = <-b.stream.Events():
+		if !ok {
+			return 0, io.ErrUnexpectedEOF
+		}
 	}
 
 	switch event := event.(type) {
@@ -170,8 +185,6 @@ func (b *streamingBody) Read(p []byte) (int, error) {
 		n := copy(p, event.Value.Payload)
 		b.buf = event.Value.Payload[n:]
 		return n, b.stream.Err()
-	case nil:
-		return 0, io.ErrUnexpectedEOF
 	default:
 		return 0, fmt.Errorf("lambtrip: unexpected event type: %T", event)
 	}
