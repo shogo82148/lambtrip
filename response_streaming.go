@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"mime"
 	"net/http"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -37,14 +36,14 @@ type invokeWithResponseStreamOutput struct {
 	StreamGetter streamGetter
 }
 
-var _ http.RoundTripper = (*Transport)(nil)
+var _ http.RoundTripper = (*ResponseStreamTransport)(nil)
 
-type Transport struct {
+type ResponseStreamTransport struct {
 	lambda func(ctx context.Context, params *lambda.InvokeWithResponseStreamInput, optFns ...func(*lambda.Options)) (*invokeWithResponseStreamOutput, error)
 }
 
-func NewTransport(c *lambda.Client) *Transport {
-	return &Transport{
+func NewResponseStreamTransport(c *lambda.Client) *ResponseStreamTransport {
+	return &ResponseStreamTransport{
 		lambda: func(ctx context.Context, params *lambda.InvokeWithResponseStreamInput, optFns ...func(*lambda.Options)) (*invokeWithResponseStreamOutput, error) {
 			out, err := c.InvokeWithResponseStream(ctx, params, optFns...)
 			if err != nil {
@@ -55,7 +54,7 @@ func NewTransport(c *lambda.Client) *Transport {
 	}
 }
 
-func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
+func (t *ResponseStreamTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	ctx := req.Context()
 
 	// build the request
@@ -77,14 +76,6 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 		return nil, err
 	}
 	stream := out.StreamGetter.GetStream()
-	mediatype, _, err := mime.ParseMediaType(aws.ToString(out.Output.ResponseStreamContentType))
-	if err != nil {
-		return handleStreamingFallbackBuffered(ctx, stream, req)
-	}
-
-	if mediatype != "application/vnd.awslambda.http-integration-response" && mediatype != "application/vnd.amazon.eventstream" {
-		return handleStreamingFallbackBuffered(ctx, stream, req)
-	}
 
 	// handle the http-integration-response
 	resp, buf, err := handleStreamingPrelude(ctx, stream)
@@ -188,44 +179,4 @@ func (b *streamingBody) Read(p []byte) (int, error) {
 
 func (b *streamingBody) Close() error {
 	return b.stream.Close()
-}
-
-func handleStreamingFallbackBuffered(ctx context.Context, stream *lambda.InvokeWithResponseStreamEventStream, req *http.Request) (*http.Response, error) {
-	buf := []byte{}
-	defer stream.Close()
-
-LOOP:
-	for {
-		var event types.InvokeWithResponseStreamResponseEvent
-		select {
-		case <-ctx.Done():
-			stream.Close()
-			return nil, ctx.Err()
-		case event = <-stream.Events():
-		}
-
-		switch event := event.(type) {
-		case *types.InvokeWithResponseStreamResponseEventMemberInvokeComplete:
-			if event.Value.ErrorCode != nil || event.Value.ErrorDetails != nil {
-				return nil, &ResponseStreamError{
-					ErrorCode:    aws.ToString(event.Value.ErrorCode),
-					ErrorDetails: aws.ToString(event.Value.ErrorDetails),
-				}
-			}
-			break LOOP
-		case *types.InvokeWithResponseStreamResponseEventMemberPayloadChunk:
-			buf = append(buf, event.Value.Payload...)
-		case nil:
-			return nil, io.ErrUnexpectedEOF
-		default:
-			return nil, fmt.Errorf("lambtrip: unexpected event type: %T", event)
-		}
-	}
-
-	// build the response
-	var resp response
-	if err := json.Unmarshal(buf, &resp); err != nil {
-		return nil, err
-	}
-	return buildResponse(&resp, req)
 }
