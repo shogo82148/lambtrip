@@ -172,7 +172,7 @@ func buildRequest(req *http.Request) (*request, error) {
 	now := time.Now().UTC()
 
 	// build the body
-	isBase64Encoded := req.Body != nil && isBinary(req.Header.Get("Content-Type"))
+	isBase64Encoded := req.Body != nil && isBinary(req.Header)
 	body := []byte{}
 	if req.Body != nil {
 		var err error
@@ -232,7 +232,13 @@ func buildRequest(req *http.Request) (*request, error) {
 }
 
 // assume text/*, application/json, application/javascript, application/xml, */*+json, */*+xml as text
-func isBinary(contentType string) bool {
+func isBinary(headers http.Header) bool {
+	contentEncoding := headers.Get("Content-Encoding")
+	if contentEncoding != "" && !strings.EqualFold(contentEncoding, "identity") {
+		return true
+	}
+
+	contentType := headers.Get("Content-Type")
 	i := strings.Index(contentType, ";")
 	if i == -1 {
 		i = len(contentType)
