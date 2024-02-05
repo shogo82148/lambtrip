@@ -10,19 +10,20 @@ import (
 )
 
 func Example() {
-	// initialize AWS SDK
+	// Initialize AWS SDK to create a service client for AWS Lambda.
 	cfg, err := config.LoadDefaultConfig(context.Background())
 	if err != nil {
 		panic(err)
 	}
 	svc := lambda.NewFromConfig(cfg)
 
-	// register the lambda protocol
+	// Create a new HTTP transport and register the "lambda" protocol with a custom transport handler.
 	t := &http.Transport{}
 	t.RegisterProtocol("lambda", lambtrip.NewBufferedTransport(svc))
+	// Create a new HTTP client using the custom transport to handle requests to Lambda functions.
 	c := &http.Client{Transport: t}
 
-	// send a request to the lambda function
+	// Make an HTTP GET request to a specific Lambda function using the custom "lambda://" protocol.
 	resp, err := c.Get("lambda://function-name/foo/bar")
 	if err != nil {
 		panic(err)
