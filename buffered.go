@@ -231,10 +231,12 @@ func buildRequest(req *http.Request) (*request, error) {
 	}, nil
 }
 
-// assume text/*, application/json, application/javascript, application/xml, */*+json, */*+xml as text
+// assume text/*, application/json, application/javascript, application/xml, */*+json, */*+xml, etc. as text
 func isBinary(headers http.Header) bool {
 	contentEncoding := headers.Values("Content-Encoding")
 	if len(contentEncoding) > 0 {
+		// typically, gzip, deflate, br, etc.
+		// these compressed encodings are not text, they are binary.
 		return true
 	}
 
@@ -250,6 +252,7 @@ func isBinary(headers http.Header) bool {
 	}
 	mainType := mediaType[:i]
 
+	// common text mime types
 	if strings.EqualFold(mainType, "text") {
 		return false
 	}
@@ -266,6 +269,7 @@ func isBinary(headers http.Header) bool {
 		return false
 	}
 
+	// custom text mime types, such as application/*+json, application/*+xml
 	i = strings.LastIndex(mediaType, "+")
 	if i == -1 {
 		i = 0
@@ -280,6 +284,8 @@ func isBinary(headers http.Header) bool {
 	if strings.EqualFold(suffix, "+xml") {
 		return false
 	}
+
+	// assume it's binary
 	return true
 }
 
