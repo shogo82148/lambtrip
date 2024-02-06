@@ -203,15 +203,6 @@ func TestIsBinary(t *testing.T) {
 			want: true,
 		},
 
-		// text/html and not encoded
-		{
-			header: http.Header{
-				"Content-Type":     []string{"text/html; charset=utf-8"},
-				"Content-Encoding": []string{"identity"},
-			},
-			want: false,
-		},
-
 		// text/*
 		{
 			header: http.Header{

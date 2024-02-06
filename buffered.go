@@ -233,8 +233,8 @@ func buildRequest(req *http.Request) (*request, error) {
 
 // assume text/*, application/json, application/javascript, application/xml, */*+json, */*+xml as text
 func isBinary(headers http.Header) bool {
-	contentEncoding := headers.Get("Content-Encoding")
-	if contentEncoding != "" && !strings.EqualFold(contentEncoding, "identity") {
+	contentEncoding := headers.Values("Content-Encoding")
+	if len(contentEncoding) > 0 {
 		return true
 	}
 
