@@ -181,6 +181,9 @@ func (b *streamingBody) Read(p []byte) (int, error) {
 				ErrorDetails: aws.ToString(event.Value.ErrorDetails),
 			}
 		}
+		if err := b.stream.Err(); err != nil {
+			return 0, err
+		}
 		return 0, io.EOF
 	case *types.InvokeWithResponseStreamResponseEventMemberPayloadChunk:
 		n := copy(p, event.Value.Payload)
@@ -201,6 +204,7 @@ func (b *streamingBody) WriteTo(w io.Writer) (int64, error) {
 		}
 	}
 
+LOOP:
 	for {
 		var ok bool
 		var event types.InvokeWithResponseStreamResponseEvent
@@ -221,7 +225,7 @@ func (b *streamingBody) WriteTo(w io.Writer) (int64, error) {
 					ErrorDetails: aws.ToString(event.Value.ErrorDetails),
 				}
 			}
-			return n, nil
+			break LOOP
 		case *types.InvokeWithResponseStreamResponseEventMemberPayloadChunk:
 			m, err := w.Write(event.Value.Payload)
 			n += int64(m)
@@ -232,6 +236,11 @@ func (b *streamingBody) WriteTo(w io.Writer) (int64, error) {
 			return n, fmt.Errorf("lambtrip: unexpected event type: %T", event)
 		}
 	}
+
+	if err := b.stream.Err(); err != nil {
+		return n, err
+	}
+	return n, nil
 }
 
 func (b *streamingBody) Close() error {
