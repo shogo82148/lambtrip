@@ -10,6 +10,7 @@ jobs:
       fail-fast: false
       matrix:
         go:
+          - "1.22"
           - "1.21"
     timeout-minutes: 10
     steps:
