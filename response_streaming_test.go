@@ -1,11 +1,13 @@
 package lambtrip
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
 	"net/http"
 	"testing"
+	"testing/iotest"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
@@ -123,6 +125,103 @@ func TestTransport(t *testing.T) {
 		t.Fatal(err)
 	}
 	if string(body) != `"Hello, world!"` {
+		t.Errorf("body = %q, want %q", body, `"Hello, world!"`)
+	}
+	if err := resp.Body.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestTransport_OneByteReader(t *testing.T) {
+	transport := &ResponseStreamTransport{
+		lambda: func(ctx context.Context, params *lambda.InvokeWithResponseStreamInput, optFns ...func(*lambda.Options)) (*invokeWithResponseStreamOutput, error) {
+			return &invokeWithResponseStreamOutput{
+				Output: &lambda.InvokeWithResponseStreamOutput{
+					StatusCode:                http.StatusOK,
+					ResponseStreamContentType: aws.String("application/vnd.awslambda.http-integration-response"),
+				},
+				StreamGetter: GetStreamMock(func() *lambda.InvokeWithResponseStreamEventStream {
+					stream := lambda.NewInvokeWithResponseStreamEventStream()
+					stream.Reader = newInvokeWithResponseStreamResponseEventReader([][]byte{
+						[]byte(`{}`),
+						{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+						[]byte(`"Hello, world!"`),
+					})
+					return stream
+				}),
+			}, nil
+		},
+	}
+
+	ctx := context.Background()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://example.com/foo/bar", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := transport.RoundTrip(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if resp.Header.Get("Content-Type") != "application/json" {
+		t.Errorf("resp.Header.Get(%q) = %q, want %q", "Content-Type", resp.Header.Get("Content-Type"), "application/json")
+	}
+
+	r := iotest.OneByteReader(resp.Body)
+	body, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(body) != `"Hello, world!"` {
+		t.Errorf("body = %q, want %q", body, `"Hello, world!"`)
+	}
+	if err := resp.Body.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestTransport_Copy(t *testing.T) {
+	transport := &ResponseStreamTransport{
+		lambda: func(ctx context.Context, params *lambda.InvokeWithResponseStreamInput, optFns ...func(*lambda.Options)) (*invokeWithResponseStreamOutput, error) {
+			return &invokeWithResponseStreamOutput{
+				Output: &lambda.InvokeWithResponseStreamOutput{
+					StatusCode:                http.StatusOK,
+					ResponseStreamContentType: aws.String("application/vnd.awslambda.http-integration-response"),
+				},
+				StreamGetter: GetStreamMock(func() *lambda.InvokeWithResponseStreamEventStream {
+					stream := lambda.NewInvokeWithResponseStreamEventStream()
+					stream.Reader = newInvokeWithResponseStreamResponseEventReader([][]byte{
+						[]byte(`{}`),
+						{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+						[]byte(`"Hello, world!"`),
+					})
+					return stream
+				}),
+			}, nil
+		},
+	}
+
+	ctx := context.Background()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://example.com/foo/bar", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := transport.RoundTrip(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if resp.Header.Get("Content-Type") != "application/json" {
+		t.Errorf("resp.Header.Get(%q) = %q, want %q", "Content-Type", resp.Header.Get("Content-Type"), "application/json")
+	}
+
+	buf := &bytes.Buffer{}
+	_, err = io.Copy(buf, resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := buf.String()
+	if body != `"Hello, world!"` {
 		t.Errorf("body = %q, want %q", body, `"Hello, world!"`)
 	}
 	if err := resp.Body.Close(); err != nil {
