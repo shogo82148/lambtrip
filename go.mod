@@ -5,7 +5,7 @@ go 1.21.0
 require (
 	github.com/aws/aws-sdk-go-v2 v1.25.0
 	github.com/aws/aws-sdk-go-v2/config v1.27.0
-	github.com/aws/aws-sdk-go-v2/service/lambda v1.50.0
+	github.com/aws/aws-sdk-go-v2/service/lambda v1.51.0
 	github.com/shogo82148/go-http-logger v1.3.0
 )
 
