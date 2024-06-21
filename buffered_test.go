@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"regexp"
 	"testing"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
 )
 
@@ -332,5 +334,78 @@ func TestNewRequestID(t *testing.T) {
 			t.Errorf("duplicate request ID: %q", id)
 		}
 		m[id] = true
+	}
+}
+
+func TestBufferedTransportWithQualifier(t *testing.T) {
+	transport := &BufferedTransport{
+		lambda: InvokeMock(func(ctx context.Context, params *lambda.InvokeInput, optFns ...func(*lambda.Options)) (*lambda.InvokeOutput, error) {
+			return &lambda.InvokeOutput{
+				StatusCode: http.StatusOK,
+				Payload:    []byte(fmt.Sprintf(`{"body": "\"%s\""}`, aws.ToString(params.Qualifier))),
+			}, nil
+		}),
+	}
+
+	ctx := context.Background()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "lambda://my-alias@function-name/foo/bar", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := transport.RoundTrip(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if resp.Status != "200 OK" {
+		t.Errorf("resp.Status = %q, want %q", resp.Status, "200 OK")
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(body) != `"my-alias"` {
+		t.Errorf("body = %q, want %q", string(body), `"my-alias"`)
+	}
+	if err := resp.Body.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestBufferedTransportWithoutQualifier(t *testing.T) {
+	transport := &BufferedTransport{
+		lambda: InvokeMock(func(ctx context.Context, params *lambda.InvokeInput, optFns ...func(*lambda.Options)) (*lambda.InvokeOutput, error) {
+			if params.Qualifier != nil {
+				t.Error("params.Qualifier = non-nil, want nil")
+			}
+			return &lambda.InvokeOutput{
+				StatusCode: http.StatusOK,
+				Payload:    []byte(`{"body": "\"ok\""}`),
+			}, nil
+		}),
+	}
+
+	ctx := context.Background()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "lambda://function-name/foo/bar", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := transport.RoundTrip(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if resp.Status != "200 OK" {
+		t.Errorf("resp.Status = %q, want %q", resp.Status, "200 OK")
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(body) != `"ok"` {
+		t.Errorf("body = %q, want %q", string(body), `"ok"`)
+	}
+	if err := resp.Body.Close(); err != nil {
+		t.Fatal(err)
 	}
 }

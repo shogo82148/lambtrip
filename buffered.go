@@ -145,10 +145,15 @@ func (t *BufferedTransport) RoundTrip(req *http.Request) (*http.Response, error)
 	}
 
 	// invoke the lambda
-	out, err := t.lambda.Invoke(ctx, &lambda.InvokeInput{
+	in := &lambda.InvokeInput{
 		FunctionName: aws.String(req.URL.Host),
 		Payload:      payload,
-	})
+	}
+	if req.URL.User != nil {
+		// lambda://alias@function
+		in.Qualifier = aws.String(req.URL.User.Username())
+	}
+	out, err := t.lambda.Invoke(ctx, in)
 	if err != nil {
 		return nil, err
 	}
