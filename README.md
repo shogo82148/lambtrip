@@ -68,6 +68,16 @@ if err != nil {
 defer resp.Body.Close()
 ```
 
+#### Specify the function qualifier
+
+You can specify the function qualifier by the URL.
+
+```go
+resp, err := c.Get("lambda://xxx@function-name/foo/bar")
+```
+
+`xxx` is the function qualifier (alias name or version number).
+
 ### Use function-url-local command
 
 function-url-local is a minimum clone of AWS Lambda Function URLs.
